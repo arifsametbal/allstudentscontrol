@@ -42,8 +42,14 @@
 <div id="app" class="flex flex-col min-h-screen max-w-md mx-auto bg-gray-50 shadow-2xl relative overflow-hidden">
 
     <!-- BRANDING HEADER -->
-    <div class="w-full bg-gray-900 text-white text-[10px] text-center py-1 font-bold tracking-[0.2em] uppercase select-none z-50">
-        ARIF SAMET BAL
+    <div class="w-full bg-gray-900 text-white text-[10px] text-center py-1 font-bold tracking-[0.2em] uppercase select-none z-50 flex justify-between items-center px-4">
+        <span class="flex-1"></span>
+        <span class="flex-1">ARIF SAMET BAL</span>
+        <span class="flex-1 text-right">
+            <button @click="refreshData" class="text-white/80 hover:text-white" title="Verileri Yenile">
+                <i class="fas fa-sync-alt" :class="{'animate-spin': loading}"></i>
+            </button>
+        </span>
     </div>
 
     <!-- TOAST NOTIFICATION -->
@@ -55,9 +61,9 @@
     </transition>
 
     <!-- FULL SCREEN LOADING -->
-    <div v-if="loading" class="absolute inset-0 z-[100] flex flex-col items-center justify-center bg-white/95 backdrop-blur-sm">
+    <div v-if="loading && !currentUser" class="absolute inset-0 z-[100] flex flex-col items-center justify-center bg-white/95 backdrop-blur-sm">
         <div class="animate-spin rounded-full h-12 w-12 border-b-4 border-pink-500 mb-3"></div>
-        <p class="text-pink-600 font-bold animate-pulse">Veriler Eşitleniyor...</p>
+        <p class="text-pink-600 font-bold animate-pulse">Sistem Yükleniyor...</p>
     </div>
 
     <!-- 1. LOGIN EKRANI -->
@@ -217,7 +223,7 @@
                         <button v-if="editMode" @click="removeActivity(index)" class="absolute -top-2 -right-2 bg-red-500 text-white rounded-full w-6 h-6 flex items-center justify-center z-20 shadow-md hover:bg-red-600 transition"><i class="fas fa-times text-xs"></i></button>
                         <div :class="act.color" class="w-full p-3 rounded-2xl shadow-sm border-b-4 border-black/5 flex flex-col items-center justify-center h-32 relative transition-all">
                             
-                            <!-- İKON DÜZENLEME (GÖRSEL SEÇİCİ TETİKLEYİCİ) -->
+                            <!-- İKON DÜZENLEME -->
                             <div v-if="editMode" class="flex flex-col items-center justify-center w-full mb-1">
                                 <button @click="openIconPicker(act)" class="bg-white/60 p-2 rounded-full mb-1 hover:bg-white border border-gray-300 transition">
                                     <i :class="['fas', act.icon, 'text-2xl text-gray-700']"></i>
@@ -420,8 +426,13 @@
                 { val: 'fa-swimmer', label: 'Yüzme' }, { val: 'fa-dumbbell', label: 'Spor' }
             ];
 
-            // --- DATA FILTERING ---
-            const formatDateKey = (d) => d.toLocaleDateString('tr-TR');
+            // SAFER DATE FORMATTER
+            const formatDateKey = (d) => {
+                const day = String(d.getDate()).padStart(2, '0');
+                const month = String(d.getMonth() + 1).padStart(2, '0');
+                const year = d.getFullYear();
+                return `${day}.${month}.${year}`;
+            };
             const selectedDateKey = computed(() => formatDateKey(selectedDate.value));
 
             const dailyActivities = computed(() => activityLog.value.filter(l => l.userId === activeUserId.value && l.date === selectedDateKey.value && Number(l.minutes) > 0));
@@ -455,17 +466,15 @@
                 return days;
             });
 
-            // --- WATCHERS ---
+            // WATCHERS
             watch([dailyActivities, activeTab], () => { if(activeTab.value === 'rutin' && (currentUser.value || viewingUser.value)) nextTick(renderPieChart); }, { deep: true });
             watch([filteredRecords, activeTab, chartSubject], () => { if(activeTab.value === 'ders' && (currentUser.value || viewingUser.value)) nextTick(renderLineChart); }, { deep: true });
 
-            // --- NOTIFICATION ---
             const showToast = (msg, icon = 'fa-check-circle') => {
                 toast.value = { show: true, message: msg, icon };
                 setTimeout(() => { toast.value.show = false; }, 2000);
             };
 
-            // --- LOGIN & USER MANAGEMENT ---
             const handleLogin = () => {
                 loginError.value = '';
                 if(loginMode.value === 'admin') {
@@ -538,7 +547,6 @@
                 nextTick(() => { renderPieChart(); });
             };
 
-            // --- CORE FUNCTIONS ---
             const updateSetting = async (key, val) => {
                 if(!userSettings.value[activeUserId.value]) userSettings.value[activeUserId.value] = {};
                 userSettings.value[activeUserId.value][key] = val;
@@ -568,7 +576,6 @@
             const isSelected = (d) => formatDateKey(d) === selectedDateKey.value;
             const onManualDateChange = (e) => { if(e.target.value) selectedDate.value = new Date(e.target.value); };
 
-            // --- FILE UPLOAD ---
             const triggerFileUpload = () => {
                 if(editMode.value) document.querySelector('input[type=file]').click();
                 else showAlert("Uyarı", "Fotoğraf değiştirmek için önce düzenleme (kalem) ikonuna basmalısın.");
@@ -596,7 +603,6 @@
                 }
             };
 
-            // --- ACTIVITY & SUBJECT MANAGEMENT ---
             const openIconPicker = (act) => {
                 activeEditingActivity.value = act;
                 showIconPicker.value = true;
@@ -664,7 +670,6 @@
                 return newTest.value.subject === subj ? 'bg-green-500 text-white shadow-md transform scale-105' : 'bg-gray-100 text-gray-500 hover:bg-gray-200';
             };
 
-            // --- DATA OPERATIONS (CRUD) ---
             const sendDataToGoogle = async (payload) => {
                 if(!GOOGLE_SCRIPT_URL) return;
                 
@@ -672,7 +677,6 @@
                 if (!payload.id) payload.id = 'id_' + Date.now() + Math.random().toString(36).substr(2, 9);
                 if(!payload.userId && activeUserId.value) payload.userId = activeUserId.value;
                 
-                // no-cors modu ile gönderim (Hata fırlatmaz, yanıt okunamaz ama veri gider)
                 await fetch(GOOGLE_SCRIPT_URL, {
                     method: "POST",
                     mode: "no-cors", 
@@ -688,7 +692,6 @@
                     if(type === 'activity') activityLog.value = activityLog.value.filter(x => x.id !== id);
                     else testRecords.value = testRecords.value.filter(x => x.id !== id);
                     showToast("Kayıt silindi", "fa-trash");
-                    // Background sync
                     await sendDataToGoogle({ dataType: 'delete', deleteId: id });
                     nextTick(() => { if(activeTab.value === 'rutin') renderPieChart(); if(activeTab.value === 'ders') renderLineChart(); });
                 });
@@ -783,18 +786,15 @@
                 await sendDataToGoogle(payload);
             };
             
-            // --- HELPERS ---
             const getDayActivityTotal = (actId) => dailyActivities.value.filter(x => x.type === actId).reduce((sum, x) => sum + x.minutes, 0);
             const getActivityLabel = (id) => currentActivities.value.find(a => a.id === id)?.label || 'Bilinmeyen';
             const getActivityIcon = (id) => currentActivities.value.find(a => a.id === id)?.icon || 'fa-star';
             
-            // --- MODALS ---
             const showInput = (title, placeholder, initialValue, callback) => { genericModal.value = { show: true, type: 'input', title, placeholder, inputValue: initialValue, confirmText: 'Kaydet', onConfirm: callback }; };
             const showConfirm = (title, message, callback) => { genericModal.value = { show: true, type: 'confirm', title, message, inputValue: '', confirmText: 'Evet', onConfirm: callback }; };
             const showAlert = (title, message) => { genericModal.value = { show: true, type: 'alert', title, message, inputValue: '', confirmText: 'Tamam', onConfirm: () => { genericModal.value.show = false; } }; };
             const confirmGenericModal = () => { if(genericModal.value.onConfirm) genericModal.value.onConfirm(genericModal.value.inputValue); genericModal.value.show = false; };
 
-            // --- CHARTS ---
             const renderPieChart = () => {
                 const ctx = document.getElementById('rutinChart');
                 if(!ctx) return; if(pieChart) pieChart.destroy();
@@ -812,11 +812,15 @@
                 lineChart = new Chart(ctx, { type: 'line', data: { labels: labels, datasets: [{ label: 'Başarı Yüzdesi (%)', data: data, borderColor: '#4CAF50', backgroundColor: 'rgba(76, 175, 80, 0.1)', fill: true, tension: 0.3 }] }, options: { responsive: true, maintainAspectRatio: false, scales: { y: { beginAtZero: true, max: 100 } } } });
             };
 
+            const refreshData = async () => {
+                await fetchDataFromGoogle();
+                showToast("Veriler yenilendi");
+            };
+
             const fetchDataFromGoogle = async () => {
                 if(!GOOGLE_SCRIPT_URL) return;
                 loading.value = true;
                 try {
-                    // Cache'i önlemek için timestamp eklendi
                     const res = await fetch(GOOGLE_SCRIPT_URL + '?t=' + Date.now(), { redirect: "follow" }); 
                     if (!res.ok) throw new Error("Sunucu yanıt vermedi");
                     const data = await res.json();
@@ -847,7 +851,7 @@
                 showWelcome, activeTab, selectedDate, editMode, editingId,
                 showModal, currentActivity, modalMinutes, modalPages, newTest, calculateWrong, isValidTest, chartSubject,
                 genericModal, confirmGenericModal,
-                toast, showIconPicker, iconOptions, selectIcon, openIconPicker,
+                toast, showIconPicker, iconOptions, selectIcon, openIconPicker, refreshData,
                 handleLogin, logout, addNewUser, deleteUser, impersonateUser,
                 toggleEditMode, selectDate, changeWeek, formatDateDisplay, isSelected, onManualDateChange,
                 triggerFileUpload, onFileSelected, addNewActivity, removeActivity, addSubject, removeSubject, renameSubject, getSubjectButtonClass,
